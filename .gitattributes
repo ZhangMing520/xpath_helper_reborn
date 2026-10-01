@@ -1,0 +1,3 @@
+# Keep the privacy policy in the repo (for GitHub Pages) but exclude it from
+# the Chrome Web Store package produced by `git archive`.
+privacy-policy.html export-ignore

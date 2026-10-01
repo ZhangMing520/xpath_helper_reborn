@@ -35,8 +35,12 @@ xh.bind = function(object, method) {
 };
 
 xh.elementsShareFamily = function(primaryEl, siblingEl) {
+  // getAttribute('class'), not .className: on SVG elements className is an
+  // SVGAnimatedString, so string comparison would always fail.
+  var primaryClass = primaryEl.getAttribute('class');
+  var siblingClass = siblingEl.getAttribute('class');
   if (primaryEl.tagName === siblingEl.tagName &&
-      (!primaryEl.className || primaryEl.className === siblingEl.className) &&
+      (!primaryClass || primaryClass === siblingClass) &&
       (!primaryEl.id || primaryEl.id === siblingEl.id)) {
     return true;
   }
@@ -69,14 +73,25 @@ xh.getElementIndex = function(el) {
 // non-element node (see nodeStep); given one, the <img> convenience of ending at
 // /@src is skipped so the caller's step is the only one.
 xh.makeQueryForElement = function(el, step) {
+  // Quotes in an id/class must be escaped, or the resulting XPath is invalid
+  // (e.g. id="a'b" would produce the broken predicate [@id='a'b']).
+  var xpLit = function(value) {
+    if (value.indexOf("'") === -1) {
+      return "'" + value + "'";
+    }
+    if (value.indexOf('"') === -1) {
+      return '"' + value + '"';
+    }
+    return "concat('" + value.replace(/'/g, "',\"'\",'") + "')";
+  };
   var query = '';
   for (; el && el.nodeType === Node.ELEMENT_NODE; el = el.parentNode) {
     var component = el.tagName.toLowerCase();
     var index = xh.getElementIndex(el);
     if (el.id) {
-      component += '[@id=\'' + el.id + '\']';
-    } else if (el.className) {
-      component += '[@class=\'' + el.className + '\']';
+      component += '[@id=' + xpLit(el.id) + ']';
+    } else if (el.getAttribute('class')) {
+      component += '[@class=' + xpLit(el.getAttribute('class')) + ']';
     }
     if (index >= 1) {
       component += '[' + index + ']';
@@ -301,17 +316,24 @@ xh.evaluateQuery = function(query) {
     nodeCount = 1;
     scalar('string');
   } else if (xpathResult.resultType ===
-             XPathResult.UNORDERED_NODE_ITERATOR_TYPE) {
+             XPathResult.UNORDERED_NODE_ITERATOR_TYPE ||
+             xpathResult.resultType ===
+             XPathResult.ORDERED_NODE_ITERATOR_TYPE) {
     for (var it = xpathResult.iterateNext(); it;
          it = xpathResult.iterateNext()) {
       // Read the text once: it is not free for an element (it walks the subtree)
       // and both the flat string and the row need it.
       var text = it.textContent || '';
       nodesToHighlight.push(it);
-      if (str) {
-        str += '\n';
+      // Cap the flat string at MAX_RESULT_ROWS matches so a query matching
+      // tens of thousands of nodes cannot build a huge string on every
+      // keystroke; the row list is capped the same way.
+      if (nodeCount < MAX_RESULT_ROWS) {
+        if (str) {
+          str += '\n';
+        }
+        str += text;
       }
-      str += text;
       nodeCount++;
       record(it, xh.nodeKind(it), text);
     }
@@ -395,7 +417,7 @@ xh.Bar.prototype.updateBar_ = function(update_query) {
     'rows': result.rows,
     'message': result.message
   };
-  chrome.runtime.sendMessage(request);
+  chrome.runtime.sendMessage(request).catch(function() {});
 };
 
 xh.Bar.prototype.showBar_ = function() {
@@ -522,10 +544,10 @@ xh.Bar.prototype.handleRequest_ = function(request, sender, callback) {
 };
 
 xh.Bar.prototype.mouseMove_ = function(e) {
-  if (this.currEl_ === e.toElement) {
+  if (this.currEl_ === e.target) {
     return;
   }
-  this.currEl_ = e.toElement;
+  this.currEl_ = e.target;
   if (e.shiftKey) {
     this.updateQueryAndBar_(this.currEl_);
   }

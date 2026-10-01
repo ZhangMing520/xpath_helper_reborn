@@ -70,7 +70,7 @@ var evaluateQuery = function() {
     'type': 'evaluate',
     'query': queryEl.value
   };
-  chrome.runtime.sendMessage(request);
+  chrome.runtime.sendMessage(request).catch(function() {});
 };
 
 // Which view the results box shows. Kept in the iframe's own storage so it
@@ -225,7 +225,7 @@ var handleMouseMove = function(e) {
     mostRecentRelocateTimeInMs = timeInMs;
 
     // Tell content script to move iframe to a different part of the screen.
-    chrome.runtime.sendMessage({'type': 'relocateBar'});
+    chrome.runtime.sendMessage({'type': 'relocateBar'}).catch(function() {});
   }
 };
 
@@ -401,4 +401,4 @@ var request = {
   'type': 'height',
   'height': document.documentElement.offsetHeight
 };
-chrome.runtime.sendMessage(request);
+chrome.runtime.sendMessage(request).catch(function() {});

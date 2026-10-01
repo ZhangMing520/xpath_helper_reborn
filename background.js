@@ -46,3 +46,28 @@ chrome.commands.onCommand.addListener((command, tab) => {
     chrome.tabs.sendMessage(tab.id, {type: 'toggleBar'}).catch(() => {});
   }
 });
+
+// On first install or update, tabs already open before the change still run the
+// old (or no) content script, so the bar would not work there until each page
+// is refreshed. Inject into every http(s) tab so the extension works
+// immediately; the dispose() guard at the top of content.js drops any existing
+// instance first, so re-injecting never stacks listeners.
+function injectIntoOpenTabs() {
+  chrome.tabs.query({}, function(tabs) {
+    tabs.forEach(function(tab) {
+      // Skip tabs with no id/url and protected schemes (chrome://, file://,
+      // chrome-extension://, about:) that content scripts cannot be injected
+      // into.
+      if (tab.id == null || !tab.url || !/^https?:/i.test(tab.url)) {
+        return;
+      }
+      chrome.scripting.executeScript({
+        target: {tabId: tab.id},
+        files: ['content.js']
+      }).catch(() => {});
+    });
+  });
+}
+
+chrome.runtime.onInstalled.addListener(injectIntoOpenTabs);
+
